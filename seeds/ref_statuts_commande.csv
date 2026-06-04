@@ -1,0 +1,7 @@
+code_statut,libelle_statut,est_terminal,ordre_traitement
+EN_COURS,En cours de traitement,false,1
+VALIDE,Validée,false,2
+EXPEDIE,Expédiée,false,3
+LIVRE,Livrée,true,4
+ANNULE,Annulée,true,5
+REMBOURSE,Remboursée,true,6

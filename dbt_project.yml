@@ -1,0 +1,57 @@
+name: 'dbt_sandbox'
+version: '1.0.0'
+config-version: 2
+
+profile: 'hive_sandbox'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  # Fenêtre de relecture incrémentielle (en jours) pour gérer les arrivées tardives
+  incremental_lookback_days: 3
+  # Schéma par couche
+  bronze_schema: 'bronze'
+  silver_schema: 'silver'
+  gold_schema:   'gold'
+
+models:
+  dbt_sandbox:
+
+    bronze:
+      +schema: "{{ var('bronze_schema') }}"
+      +materialized: incremental
+      +incremental_strategy: insert_overwrite
+      +file_format: parquet
+      +partition_by: [annee, mois, jour]
+      +tags: ['bronze']
+
+    silver:
+      +schema: "{{ var('silver_schema') }}"
+      +materialized: incremental
+      +incremental_strategy: insert_overwrite
+      +file_format: parquet
+      +partition_by: [annee, mois, jour]
+      +tags: ['silver']
+
+    gold:
+      +schema: "{{ var('gold_schema') }}"
+      +materialized: incremental
+      +incremental_strategy: insert_overwrite
+      +file_format: parquet
+      +partition_by: [annee, mois]
+      +tags: ['gold']
+
+seeds:
+  dbt_sandbox:
+    +schema: 'referentiel'
+    +file_format: parquet

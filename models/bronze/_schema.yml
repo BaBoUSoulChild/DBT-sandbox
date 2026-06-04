@@ -1,0 +1,34 @@
+version: 2
+
+models:
+
+  - name: brz_commandes
+    description: "Ingestion brute des commandes partitionnée par date de modification"
+    columns:
+      - name: id_commande
+        description: "PK commande"
+        tests:
+          - not_null
+      - name: updated_at
+        tests:
+          - not_null
+      - name: annee
+        tests:
+          - not_null
+      - name: mois
+        tests:
+          - not_null
+      - name: jour
+        tests:
+          - not_null
+
+  - name: brz_clients
+    description: "Ingestion brute du référentiel clients partitionnée par date de modification"
+    columns:
+      - name: id_client
+        description: "PK client"
+        tests:
+          - not_null
+      - name: updated_at
+        tests:
+          - not_null

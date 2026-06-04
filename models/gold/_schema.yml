@@ -1,0 +1,27 @@
+version: 2
+
+models:
+
+  - name: gld_commandes_par_jour
+    description: "KPI journaliers des commandes, partitionnés par mois"
+    columns:
+      - name: date_commande
+        tests:
+          - not_null
+          - unique
+      - name: ca_ht_total
+        tests:
+          - not_null
+      - name: nb_commandes
+        tests:
+          - not_null
+
+  - name: gld_kpi_clients
+    description: "KPI clients mensuels avec CA, panier moyen et taux d'annulation"
+    columns:
+      - name: id_client
+        tests:
+          - not_null
+      - name: date_reference
+        tests:
+          - not_null

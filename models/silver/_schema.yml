@@ -1,0 +1,34 @@
+version: 2
+
+models:
+
+  - name: slv_commandes
+    description: "Commandes nettoyées, dédoublonnées et enrichies du libellé statut"
+    columns:
+      - name: id_commande
+        tests:
+          - not_null
+          - unique
+      - name: id_client
+        tests:
+          - not_null
+      - name: montant_ht
+        tests:
+          - not_null
+      - name: statut_code
+        tests:
+          - not_null
+      - name: updated_at
+        tests:
+          - not_null
+
+  - name: slv_clients
+    description: "Référentiel clients nettoyé avec email masqué (RGPD sandbox)"
+    columns:
+      - name: id_client
+        tests:
+          - not_null
+          - unique
+      - name: email
+        tests:
+          - not_null
