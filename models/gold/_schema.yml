@@ -9,6 +9,10 @@ models:
         tests:
           - not_null
           - unique
+          # Chaque jour agrégé en Gold doit avoir des données dans Silver
+          - couverture_agregat:
+              source_model: ref('slv_commandes')
+              date_column_source: updated_at
       - name: ca_ht_total
         tests:
           - not_null
@@ -22,6 +26,12 @@ models:
       - name: id_client
         tests:
           - not_null
+          # Chaque client en Gold doit exister dans Silver
+          - cles_orphelines:
+              source_model: ref('slv_clients')
       - name: date_reference
         tests:
           - not_null
+          - couverture_agregat:
+              source_model: ref('slv_commandes')
+              date_column_source: updated_at

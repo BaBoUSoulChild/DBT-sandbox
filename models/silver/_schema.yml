@@ -4,11 +4,20 @@ models:
 
   - name: slv_commandes
     description: "Commandes nettoyées, dédoublonnées et enrichies du libellé statut"
+    tests:
+      # Perte de clés Bronze→Silver tolérée à 5 % max (dédup + rejets attendus)
+      - taux_rejet_max:
+          source_model: ref('brz_commandes')
+          key_column: id_commande
+          seuil_pct: 5
     columns:
       - name: id_commande
         tests:
           - not_null
           - unique
+          # Aucune clé Silver ne doit être absente de Bronze
+          - cles_orphelines:
+              source_model: ref('brz_commandes')
       - name: id_client
         tests:
           - not_null
@@ -24,11 +33,18 @@ models:
 
   - name: slv_clients
     description: "Référentiel clients nettoyé avec email masqué (RGPD sandbox)"
+    tests:
+      - taux_rejet_max:
+          source_model: ref('brz_clients')
+          key_column: id_client
+          seuil_pct: 2
     columns:
       - name: id_client
         tests:
           - not_null
           - unique
+          - cles_orphelines:
+              source_model: ref('brz_clients')
       - name: email
         tests:
           - not_null
