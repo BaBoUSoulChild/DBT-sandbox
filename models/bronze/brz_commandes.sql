@@ -22,6 +22,7 @@ WITH source AS (
   SELECT
     id_commande,
     id_client,
+    CAST(date_commande AS DATE)            AS date_commande,   -- date métier immuable → clé de partition Silver
     montant_ht,
     statut,
     updated_at,
@@ -36,11 +37,12 @@ WITH source AS (
 SELECT
   id_commande,
   id_client,
+  date_commande,
   montant_ht,
   statut,
   updated_at,
   _loaded_at,
   _dbt_invocation_id,
-  -- colonnes de partition Hive (toujours en dernier)
+  -- Bronze partitionné par updated_at : raw zone, multi-versions acceptées
   {{ date_partition_cols('updated_at') }}
 FROM source

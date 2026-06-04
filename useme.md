@@ -263,6 +263,114 @@ comme modélisé dans ce sandbox.
 
 ---
 
+### 4.4 Hive non-ACID : le piège du partitionnement Silver
+
+C'est le point le plus critique de toute migration ETL vers DBT sur Hive non-ACID.
+**Ne pas l'ignorer** — il produit des duplicats silencieux difficiles à détecter.
+
+#### Le problème
+
+Le `INSERT OVERWRITE` dynamique Hive n'écrase **que les partitions présentes dans
+le résultat**. Les autres partitions sont intactes. C'est un comportement correct
+pour Bronze (raw zone, multi-versions acceptées), mais fatal pour Silver si on
+partitionne par `updated_at`.
+
+```
+Commande #123 — créée le 15 Jan, modifiée le 1 Mars
+
+Run Silver incrémentiel du 1 Mars :
+  → filtre updated_at >= 27 Fev
+  → traite la commande #123 (updated_at = 1 Mars)
+  → INSERT OVERWRITE partition Silver 2024/03/01  ✓ (nouvelle version)
+  → partition Silver 2024/01/15 : INTACTE         ✗ (ancienne version toujours là)
+
+Résultat : id_commande=123 dans deux partitions Silver → test unique ÉCHOUE
+```
+
+#### La règle
+
+> **Bronze** : partitionner par `updated_at` (raw, toutes versions OK)
+>
+> **Silver** : partitionner par une **date métier stable et immuable**
+> (`date_commande`, `date_creation`…) qui ne change jamais après la création
+> de l'enregistrement
+
+#### La solution implémentée dans ce sandbox
+
+La macro `load_affected_business_partitions` dans `macros/incremental_utils.sql`
+gère cette contrainte en trois étapes :
+
+```
+Étape 1 — Détection (filtre sur updated_at) :
+  Quelles date_commande contiennent des lignes modifiées récemment ?
+  → date_commande = 15 Jan (commande #123 modifiée le 1 Mars)
+
+Étape 2 — Rechargement complet des partitions métier impactées :
+  Charger TOUTES les lignes Bronze avec date_commande = 15 Jan
+  (pas seulement celles dont updated_at >= borne, mais TOUTES)
+
+Étape 3 — Déduplication puis INSERT OVERWRITE :
+  ROW_NUMBER sur id_commande → garde la version la plus récente
+  INSERT OVERWRITE partition Silver date_commande=15 Jan
+  → remplace ENTIÈREMENT la partition → zéro doublon
+```
+
+Usage dans un modèle Silver :
+
+```sql
+{{ config(partition_by=['annee', 'mois', 'jour']) }}
+
+WITH brz AS (
+  {{ load_affected_business_partitions(
+      ref('brz_commandes'),
+      ts_column        = 'updated_at',
+      business_date_col= 'date_commande'   -- doit être immuable dans la source
+  ) }}
+),
+dedup AS (
+  {{ deduplicate('brz', ['id_commande'], 'updated_at') }}
+)
+SELECT
+  *,
+  {{ date_partition_cols('date_commande') }}  -- partition par date stable, PAS updated_at
+FROM dedup
+```
+
+#### Prérequis côté source
+
+Pour appliquer ce pattern, la source doit exposer une **date métier immuable**.
+Lors de l'audit (Phase 1), vérifier pour chaque entité :
+
+| Entité | Date métier stable candidate | Immuable ? |
+|---|---|---|
+| Commande | `date_commande`, `date_creation` | Oui si jamais rétromodifiée |
+| Client | `date_inscription` | Oui |
+| Facture | `date_facture` | Oui |
+| Événement | `event_timestamp` | Oui (passé immuable) |
+
+Si **aucune date stable n'existe** dans la source (cas rare mais possible), les
+alternatives sont, par ordre de préférence :
+
+1. Ajouter une `date_creation` côté source et la propager — solution pérenne
+2. Utiliser `DATE(MIN(updated_at) OVER (PARTITION BY id))` comme approximation
+   de la date de création — à valider avec le métier
+3. Faire un `--full-refresh` quotidien de Silver — simple mais coûteux sur
+   de gros volumes
+
+#### Paramètre Hive à vérifier
+
+La macro repose sur le partitionnement dynamique Hive. Vérifier que ces
+propriétés sont activées sur le cluster avant le premier run :
+
+```sql
+-- À vérifier via Beeline / HiveServer2
+SET hive.exec.dynamic.partition       = true;
+SET hive.exec.dynamic.partition.mode  = nonstrict;
+SET hive.exec.max.dynamic.partitions  = 10000;   -- ajuster si volume élevé
+```
+
+---
+
 ## Phase 5 – Validation en parallèle
 
 **Ne jamais couper l'ETL existant avant cette phase.** Faire tourner les deux

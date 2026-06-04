@@ -13,6 +13,12 @@
   ------------------------------------
   Agrégation journalière des commandes : CA, volume, panier moyen.
   Partition mensuelle (granularité Gold réduite).
+
+  Utilise date_commande directement depuis Silver (date métier stable)
+  plutôt qu'un CAST(updated_at AS DATE) — Silver garantit maintenant
+  qu'une commande a toujours la même date_commande quelle que soit
+  la partition dans laquelle elle a été modifiée.
+
   En mode incrémentiel, on recalcule tous les jours du mois impacté
   pour garantir la cohérence des agrégats même en cas d'arrivée tardive.
 */
@@ -29,7 +35,7 @@
 WITH slv AS (
 
   SELECT
-    CAST(updated_at AS DATE)             AS date_commande,
+    date_commande,
     id_client,
     montant_ht,
     statut_code,
@@ -38,9 +44,7 @@ WITH slv AS (
   FROM {{ ref('slv_commandes') }}
 
   {% if is_incremental() %}
-  -- recalcul de tous les jours du mois le plus récent modifié
-  WHERE DATE_TRUNC('MONTH', CAST(updated_at AS DATE))
-        >= ({{ max_ts_query }})
+  WHERE DATE_TRUNC('MONTH', date_commande) >= ({{ max_ts_query }})
   {% endif %}
 
 ),
