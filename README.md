@@ -215,7 +215,7 @@ FROM dedup
 
 - Python >= 3.9
 - Accès à un cluster Hive avec HiveServer2 (Thrift ou HTTP)
-- Variables d'environnement : `HIVE_HOST`, `HIVE_PORT`, `HIVE_USER`
+- Variables d'environnement selon la méthode d'authentification choisie (voir [Configuration](#configuration))
 
 ---
 
@@ -234,7 +234,7 @@ source .venv/bin/activate       # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
 
 # 4. Copier et renseigner le profil de connexion
-cp profiles.yml ~/.dbt/profiles.yml
+cp profiles.example.yml ~/.dbt/profiles.yml
 # éditer ~/.dbt/profiles.yml avec vos paramètres Hive
 
 # 5. Installer les packages dbt
@@ -248,28 +248,49 @@ dbt debug
 
 ## Configuration
 
-### Variables d'environnement
+Deux méthodes d'authentification sont disponibles dans `profiles.yml`.
+
+### Méthode 1 – Thrift (user/password ou LDAP)
 
 ```bash
 export HIVE_HOST=hiveserver2.moncluster.local
 export HIVE_PORT=10000
 export HIVE_USER=mon_user
-# export HIVE_PASSWORD=...   # si authentification par mot de passe
+# export HIVE_PASSWORD=...   # décommenter si LDAP/PAM activé côté cluster
+```
+
+### Méthode 2 – Kerberos
+
+> `username` n'est **pas** utilisé : l'identité est portée par le ticket TGT Kerberos.
+
+```bash
+export HIVE_HOST=hiveserver2.moncluster.local
+export HIVE_PORT=10000
+export HIVE_KRB5_SERVICE=hive
+export HIVE_KRB5_PRINCIPAL=hive/hiveserver2.moncluster.local@REALM.LOCAL
+
+# Obtenir un ticket avant de lancer dbt
+kinit mon_principal@REALM.LOCAL
 ```
 
 ### Cibles disponibles (`profiles.yml`)
 
-| Cible | Schéma Hive | Threads | Usage |
-|---|---|---|---|
-| `dev` | `dev_sandbox_*` | 4 | Développement local |
-| `prod` | `prod_sandbox_*` | 8 | Production |
+| Cible | Auth | Schéma Hive | Threads | Usage |
+|---|---|---|---|---|
+| `dev` | Thrift | `dev_sandbox_*` | 4 | Développement local |
+| `prod` | Thrift | `prod_sandbox_*` | 8 | Production |
+| `dev_kerberos` | Kerberos | `dev_sandbox_*` | 4 | Développement sur cluster sécurisé |
+| `prod_kerberos` | Kerberos | `prod_sandbox_*` | 8 | Production sur cluster sécurisé |
 
 ```bash
-# utiliser la cible dev (défaut)
+# cible thrift dev (défaut)
 dbt run
 
-# utiliser la cible prod
-dbt run --target prod
+# cible kerberos dev
+dbt run --target dev_kerberos
+
+# cible kerberos prod
+dbt run --target prod_kerberos
 ```
 
 ### Adapter les sources

@@ -1,0 +1,63 @@
+hive_sandbox:
+  target: dev
+  outputs:
+
+    # -------------------------------------------------------------------------
+    # Authentification THRIFT (user/password)
+    # Prérequis : HIVE_HOST, HIVE_PORT, HIVE_USER (+ HIVE_PASSWORD si LDAP)
+    # -------------------------------------------------------------------------
+    dev:
+      type: hive
+      method: thrift
+      host: "{{ env_var('HIVE_HOST', 'localhost') }}"
+      port: "{{ env_var('HIVE_PORT', '10000') | int }}"
+      schema: dev_sandbox
+      username: "{{ env_var('HIVE_USER', 'hive') }}"
+      # password: "{{ env_var('HIVE_PASSWORD') }}"   # décommenter si LDAP/PAM
+      threads: 4
+      connect_retries: 3
+      connect_timeout: 60
+
+    prod:
+      type: hive
+      method: thrift
+      host: "{{ env_var('HIVE_HOST') }}"
+      port: "{{ env_var('HIVE_PORT', '10000') | int }}"
+      schema: prod_sandbox
+      username: "{{ env_var('HIVE_USER') }}"
+      threads: 8
+      connect_retries: 5
+      connect_timeout: 120
+
+    # -------------------------------------------------------------------------
+    # Authentification KERBEROS
+    # Prérequis :
+    #   - ticket Kerberos valide obtenu via : kinit <principal>
+    #   - HIVE_HOST, HIVE_PORT, HIVE_KRB5_SERVICE (ex: hive)
+    #   - HIVE_KRB5_PRINCIPAL (ex: hive/hiveserver2.cluster.local@REALM.LOCAL)
+    # Note : username n'est PAS utilisé, l'identité vient du ticket TGT.
+    # -------------------------------------------------------------------------
+    dev_kerberos:
+      type: hive
+      method: kerberos
+      host: "{{ env_var('HIVE_HOST', 'localhost') }}"
+      port: "{{ env_var('HIVE_PORT', '10000') | int }}"
+      schema: dev_sandbox
+      kerberos_service_name: "{{ env_var('HIVE_KRB5_SERVICE', 'hive') }}"
+      # principal complet du service HiveServer2 (keytab côté serveur)
+      principal: "{{ env_var('HIVE_KRB5_PRINCIPAL') }}"
+      threads: 4
+      connect_retries: 3
+      connect_timeout: 60
+
+    prod_kerberos:
+      type: hive
+      method: kerberos
+      host: "{{ env_var('HIVE_HOST') }}"
+      port: "{{ env_var('HIVE_PORT', '10000') | int }}"
+      schema: prod_sandbox
+      kerberos_service_name: "{{ env_var('HIVE_KRB5_SERVICE', 'hive') }}"
+      principal: "{{ env_var('HIVE_KRB5_PRINCIPAL') }}"
+      threads: 8
+      connect_retries: 5
+      connect_timeout: 120
