@@ -1,15 +1,23 @@
 {% docs slv_commandes %}
-Commandes nettoyées, dédoublonnées et enrichies, issues de la couche Bronze.
+Commandes nettoyées et enrichies, issues de la couche Bronze. Partitionnée par
+`updated_at` (même axe que Bronze).
+
+**Comportement multi-versions (par design) :** une commande modifiée génère une
+nouvelle version dans la partition `updated_at` du jour de modification. Les
+versions précédentes restent dans leurs partitions d'origine. `id_commande` est
+donc unique *au sein d'une partition* mais pas au niveau de la table globale.
+La déduplication inter-partitions est déléguée aux modèles Gold via `deduplicate()`.
+
+Ce choix est justifié par la nature des données : les mises à jour touchent des
+commandes vieilles de plusieurs années, éparpillées sur de nombreuses partitions.
+Réécrire les partitions par date métier serait prohibitivement coûteux.
 
 Transformations appliquées :
-- **Dédoublonnage** : en cas de plusieurs versions d'une même commande, seule la plus
-  récente (MAX `updated_at`) est conservée via `ROW_NUMBER()`.
-- **Enrichissement** : jointure avec `ref_statuts_commande` pour ajouter le libellé
-  normalisé du statut en plus du code technique.
-- **Rejet** : les lignes sans `id_client` ou sans `montant_ht` sont exclues.
-- **Cast** : `montant_ht` est casté en `DECIMAL(18,2)`.
-
-Un test de taux de rejet Bronze→Silver vérifie que la perte de clés reste sous 5 %.
+- **Dédoublonnage intra-partition** : une seule version par `id_commande` dans
+  la fenêtre `updated_at` du run courant via `ROW_NUMBER()`.
+- **Enrichissement** : jointure avec `ref_statuts_commande` pour le libellé statut.
+- **Rejet** : lignes sans `id_client` ou sans `montant_ht` exclues.
+- **Cast** : `montant_ht` casté en `DECIMAL(18,2)`.
 {% enddocs %}
 
 {% docs slv_clients %}

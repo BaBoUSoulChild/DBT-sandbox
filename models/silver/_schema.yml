@@ -17,16 +17,21 @@ models:
           seuil_pct: 5
     columns:
       - name: id_commande
-        description: "Identifiant unique de la commande. Dédoublonné : une seule ligne par commande."
+        description: >
+          Identifiant de la commande. Unique au sein de chaque partition updated_at
+          (dédup intra-partition). NON unique au niveau de la table globale : une
+          commande modifiée apparaît dans plusieurs partitions. Déduplication
+          inter-partitions déléguée aux modèles Gold.
         tests:
           - not_null
-          - unique
           - cles_orphelines:
               source_model: ref('brz_commandes')
       - name: id_client
         description: "Clé étrangère vers `slv_clients`. Non nulle à cette couche (lignes orphelines rejetées)."
         tests:
           - not_null
+      - name: date_commande
+        description: "Date métier de la commande, stable et immuable. Issue de la source via Bronze."
       - name: montant_ht
         description: "{{ doc('slv_col_montant_ht') }}"
         tests:
@@ -38,7 +43,7 @@ models:
       - name: statut_libelle
         description: "{{ doc('slv_col_statut_libelle') }}"
       - name: updated_at
-        description: "Timestamp de dernière modification source. Conservé depuis Bronze sans altération."
+        description: "Timestamp de dernière modification source. Clé de partition Silver."
         tests:
           - not_null
       - name: _loaded_at
@@ -67,10 +72,12 @@ models:
           seuil_pct: 2
     columns:
       - name: id_client
-        description: "Identifiant unique du client. Dédoublonné : une seule ligne par client."
+        description: >
+          Identifiant du client. Unique au sein de chaque partition updated_at.
+          Potentiellement multi-versions au niveau de la table globale si un client
+          est modifié. Déduplication inter-partitions déléguée aux modèles Gold.
         tests:
           - not_null
-          - unique
           - cles_orphelines:
               source_model: ref('brz_clients')
       - name: nom

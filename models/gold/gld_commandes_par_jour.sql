@@ -11,16 +11,13 @@
 /*
   Gold – Commandes agrégées par jour
   ------------------------------------
-  Agrégation journalière des commandes : CA, volume, panier moyen.
-  Partition mensuelle (granularité Gold réduite).
+  Silver étant multi-versions par updated_at, la première étape est
+  obligatoire : déduplication inter-partitions avant tout agrégat.
+  Sans ce CTE, une commande modifiée serait comptabilisée plusieurs fois
+  (une fois par partition Silver dans laquelle elle apparaît).
 
-  Utilise date_commande directement depuis Silver (date métier stable)
-  plutôt qu'un CAST(updated_at AS DATE) — Silver garantit maintenant
-  qu'une commande a toujours la même date_commande quelle que soit
-  la partition dans laquelle elle a été modifiée.
-
-  En mode incrémentiel, on recalcule tous les jours du mois impacté
-  pour garantir la cohérence des agrégats même en cas d'arrivée tardive.
+  Utilise date_commande (date métier stable, issue de la source via Bronze)
+  comme axe d'agrégation — pas updated_at.
 */
 
 {% set max_ts_query %}
@@ -32,16 +29,23 @@
   FROM {{ this }}
 {% endset %}
 
-WITH slv AS (
+WITH slv_dedup AS (
+
+  -- Étape obligatoire : Silver est multi-versions (partitionné par updated_at).
+  -- On conserve uniquement la version la plus récente de chaque commande
+  -- avant d'agréger, sinon les montants et comptages seraient faux.
+  {{ deduplicate(ref('slv_commandes'), ['id_commande'], 'updated_at') }}
+
+),
+
+slv AS (
 
   SELECT
     date_commande,
     id_client,
     montant_ht,
-    statut_code,
-    annee,
-    mois
-  FROM {{ ref('slv_commandes') }}
+    statut_code
+  FROM slv_dedup
 
   {% if is_incremental() %}
   WHERE DATE_TRUNC('MONTH', date_commande) >= ({{ max_ts_query }})

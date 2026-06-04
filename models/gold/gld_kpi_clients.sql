@@ -11,37 +11,45 @@
 /*
   Gold – KPI clients (snapshot mensuel glissant)
   ------------------------------------------------
-  Calcul des indicateurs clients sur le mois courant + lookback.
-  Recalcule les mois impactés par les mises à jour Silver.
+  Silver étant multi-versions par updated_at, déduplication obligatoire
+  avant tout agrégat (même raison que gld_commandes_par_jour).
 */
 
-WITH commandes AS (
+{% set max_ts_query %}
+  SELECT DATE_TRUNC('MONTH',
+    COALESCE(MAX(date_reference), CAST('1900-01-01' AS DATE))
+    - INTERVAL {{ var('incremental_lookback_days') }} DAYS
+  )
+  FROM {{ this }}
+{% endset %}
+
+WITH slv_commandes_dedup AS (
+
+  -- Déduplication inter-partitions Silver : version la plus récente par commande
+  {{ deduplicate(ref('slv_commandes'), ['id_commande'], 'updated_at') }}
+
+),
+
+slv_clients_dedup AS (
+
+  -- Même principe pour les clients (référentiel potentiellement multi-versions)
+  {{ deduplicate(ref('slv_clients'), ['id_client'], 'updated_at') }}
+
+),
+
+commandes AS (
 
   SELECT
     id_client,
     montant_ht,
     statut_code,
-    CAST(updated_at AS DATE) AS date_commande,
-    annee,
-    mois
-  FROM {{ ref('slv_commandes') }}
+    date_commande
+  FROM slv_commandes_dedup
 
   {% if is_incremental() %}
-  WHERE DATE_TRUNC('MONTH', CAST(updated_at AS DATE))
-        >= (
-          SELECT DATE_TRUNC('MONTH',
-            COALESCE(MAX(date_reference), CAST('1900-01-01' AS DATE))
-            - INTERVAL {{ var('incremental_lookback_days') }} DAYS
-          )
-          FROM {{ this }}
-        )
+  WHERE DATE_TRUNC('MONTH', date_commande) >= ({{ max_ts_query }})
   {% endif %}
 
-),
-
-clients AS (
-  SELECT id_client, nom, pays
-  FROM {{ ref('slv_clients') }}
 ),
 
 kpi AS (
@@ -59,7 +67,7 @@ kpi AS (
     SUM(CASE WHEN c.statut_code = 'ANNULE' THEN 1 ELSE 0 END)           AS nb_annulations_mois,
     CURRENT_TIMESTAMP()                                                  AS _loaded_at
   FROM commandes c
-  INNER JOIN clients cl ON c.id_client = cl.id_client
+  INNER JOIN slv_clients_dedup cl ON c.id_client = cl.id_client
   GROUP BY
     c.id_client, cl.nom, cl.pays,
     DATE_TRUNC('MONTH', c.date_commande)

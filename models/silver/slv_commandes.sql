@@ -11,33 +11,28 @@
 /*
   Silver – Commandes
   ------------------
-  Partitionnement par DATE_COMMANDE (date métier stable, immuable)
-  et non par updated_at — c'est la clé de la gestion correcte du
-  INSERT OVERWRITE sur Hive non-ACID.
+  Partitionnement par UPDATED_AT — même convention que Bronze.
 
-  Pourquoi ce choix est critique :
-    INSERT OVERWRITE dynamique Hive n'écrase QUE les partitions présentes
-    dans le résultat. Si on partitionne par updated_at, une commande modifiée
-    migre vers une nouvelle partition et laisse l'ancienne partition Silver
-    avec l'ancienne version → duplicats inter-partitions.
-    En partitionnant par date_commande (immuable), la commande reste toujours
-    dans la même partition, que ce soit à la création ou à la 10e modification.
+  Choix architectural : Silver est multi-versions par design.
+  Une commande modifiée génère une nouvelle version dans la partition
+  updated_at du jour de modification. Les versions précédentes restent
+  dans leurs partitions d'origine.
 
-  Stratégie incrémentielle (macro load_affected_business_partitions) :
-    1. Détecter les date_commande des lignes modifiées (filtre sur updated_at)
-    2. Recharger TOUTES les lignes Bronze de ces partitions métier (pas seulement
-       les lignes modifiées) pour garantir une déduplication complète
-    3. Le INSERT OVERWRITE remplace la partition date_commande entière → propre
+  Pourquoi ne pas partitionner par date_commande :
+  Les mises à jour touchent des commandes vieilles de plusieurs années,
+  éparpillées sur de nombreuses partitions. Réécrire les partitions
+  métier serait prohibitivement coûteux sans gain réel.
+
+  Conséquence : id_commande n'est PAS unique au niveau de la table Silver
+  globale — il l'est au niveau de chaque partition updated_at.
+  La déduplication inter-partitions est déléguée aux modèles Gold.
 */
 
 WITH brz AS (
 
-  -- Recharge les partitions métier complètes affectées par les changements récents
-  {{ load_affected_business_partitions(
-      ref('brz_commandes'),
-      ts_column        = 'updated_at',
-      business_date_col= 'date_commande'
-  ) }}
+  SELECT *
+  FROM {{ ref('brz_commandes') }}
+  WHERE {{ incremental_partition_predicate('updated_at') }}
 
 ),
 
@@ -66,7 +61,9 @@ enriched AS (
 
 ),
 
--- Dédoublonnage sur la partition complète rechargée → une seule version par commande
+-- Déduplication INTRA-PARTITION uniquement : une version par id_commande
+-- dans la fenêtre updated_at du run courant.
+-- La déduplication INTER-PARTITIONS (toutes versions confondues) est faite en Gold.
 dedup AS (
   {{ deduplicate('enriched', ['id_commande'], 'updated_at') }}
 )
@@ -81,6 +78,5 @@ SELECT
   updated_at,
   _loaded_at,
   _dbt_invocation_id,
-  -- Partition par date_commande (stable) — jamais par updated_at en Silver
-  {{ date_partition_cols('date_commande') }}
+  {{ date_partition_cols('updated_at') }}
 FROM dedup
