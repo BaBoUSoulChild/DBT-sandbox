@@ -37,37 +37,23 @@ Le projet s'appuie sur **dbt-hive** (adaptateur officiel ThriftServer) et utilis
 
 ## Architecture médaillon
 
-```
-Source brute (Hive raw)
-        │
-        ▼
-┌──────────────────────────────────────────────────────┐
-│  BRONZE  –  Ingestion brute                          │
-│  Partitions : annee / mois / jour                    │
-│  • Copie fidèle de la source                         │
-│  • Ajout _loaded_at et _dbt_invocation_id            │
-│  • Aucune transformation métier                      │
-└──────────────────────┬───────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────┐
-│  SILVER  –  Nettoyage & Enrichissement               │
-│  Partitions : annee / mois / jour                    │
-│  • Dédoublonnage (ROW_NUMBER sur clé + updated_at)   │
-│  • Normalisation des types et des chaînes            │
-│  • Jointure avec les référentiels (seeds)            │
-│  • Masquage RGPD (email → hash@domaine)              │
-│  • Rejet des lignes invalides                        │
-└──────────────────────┬───────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────┐
-│  GOLD  –  Agrégats métier                            │
-│  Partitions : annee / mois                           │
-│  • KPI journaliers : CA, panier moyen, annulations   │
-│  • KPI clients : CA mensuel, fidélité                │
-│  • Recalcul du mois entier pour cohérence agrégats   │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    SRC[(Source brute\nHive raw)]
+
+    subgraph BRONZE["BRONZE – Ingestion brute | Partitions : annee / mois / jour"]
+        B1["• Copie fidèle de la source\n• Ajout _loaded_at et _dbt_invocation_id\n• Aucune transformation métier"]
+    end
+
+    subgraph SILVER["SILVER – Nettoyage & Enrichissement | Partitions : annee / mois / jour"]
+        S1["• Dédoublonnage (ROW_NUMBER sur clé + updated_at)\n• Normalisation des types et des chaînes\n• Jointure avec les référentiels (seeds)\n• Masquage RGPD (email → hash@domaine)\n• Rejet des lignes invalides"]
+    end
+
+    subgraph GOLD["GOLD – Agrégats métier | Partitions : annee / mois"]
+        G1["• KPI journaliers : CA, panier moyen, annulations\n• KPI clients : CA mensuel, fidélité\n• Recalcul du mois entier pour cohérence des agrégats"]
+    end
+
+    SRC --> BRONZE --> SILVER --> GOLD
 ```
 
 ### Modèles par couche
@@ -89,13 +75,18 @@ Source brute (Hive raw)
 
 Hive ne supporte pas `MERGE`. La stratégie utilisée est **`insert_overwrite`** : DBT identifie les partitions impactées et les réécrit entièrement.
 
-```
-Run N-1                Run N (incrémentiel)
-─────────────          ──────────────────────────────
-annee=2024             annee=2024
-  mois=01    ✓           mois=01    ✓  (inchangé)
-  mois=02    ✓           mois=02    ✓  (inchangé)
-                         mois=03    ✓  (nouvelles données → réécrit)
+```mermaid
+flowchart TD
+    A([Nouveau run DBT]) --> B{is_incremental ?}
+
+    B -- Non / full-refresh --> C[Charger toutes les partitions]
+    B -- Oui --> D["Calculer MAX(updated_at) − lookback_days"]
+
+    D --> E["Filtrer la source :\nupdated_at >= borne calculée"]
+    E --> F["INSERT OVERWRITE\nsur les partitions impactées uniquement"]
+
+    C --> G[(Table Hive\npartitionnée)]
+    F --> G
 ```
 
 ### Filtre de partition
