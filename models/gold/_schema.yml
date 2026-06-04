@@ -3,35 +3,88 @@ version: 2
 models:
 
   - name: gld_commandes_par_jour
-    description: "KPI journaliers des commandes, partitionnés par mois"
+    description: "{{ doc('gld_commandes_par_jour') }}"
+    meta:
+      owner: equipe-data-analytics
+      domaine: ventes
+      couche: gold
+      sla: "disponible J+1 avant 8h"
+      sensibilite: interne
     columns:
       - name: date_commande
+        description: "Date de la journée agrégée (CAST de `updated_at` en DATE)."
         tests:
           - not_null
           - unique
-          # Chaque jour agrégé en Gold doit avoir des données dans Silver
           - couverture_agregat:
               source_model: ref('slv_commandes')
               date_column_source: updated_at
-      - name: ca_ht_total
-        tests:
-          - not_null
       - name: nb_commandes
+        description: "Nombre total de commandes sur la journée, tous statuts confondus."
         tests:
           - not_null
+      - name: nb_clients_distincts
+        description: "Nombre de clients uniques ayant passé au moins une commande dans la journée."
+      - name: ca_ht_total
+        description: "{{ doc('gld_col_ca_ht_total') }}"
+        tests:
+          - not_null
+      - name: panier_moyen_ht
+        description: "{{ doc('gld_col_panier_moyen_ht') }}"
+      - name: ca_ht_valide
+        description: "{{ doc('gld_col_ca_ht_valide') }}"
+      - name: nb_annulations
+        description: "Nombre de commandes au statut `ANNULE` sur la journée."
+      - name: taux_annulation_pct
+        description: "{{ doc('gld_col_taux_annulation_pct') }}"
+      - name: _loaded_at
+        description: "Timestamp du dernier chargement dbt ayant produit cette ligne."
+      - name: annee
+        description: "{{ doc('brz_col_partition_annee') }}"
+      - name: mois
+        description: "{{ doc('brz_col_partition_mois') }}"
 
   - name: gld_kpi_clients
-    description: "KPI clients mensuels avec CA, panier moyen et taux d'annulation"
+    description: "{{ doc('gld_kpi_clients') }}"
+    meta:
+      owner: equipe-data-analytics
+      domaine: clients
+      couche: gold
+      sla: "disponible J+1 avant 8h"
+      sensibilite: interne
     columns:
       - name: id_client
+        description: "Identifiant du client, issu de `slv_clients`."
         tests:
           - not_null
-          # Chaque client en Gold doit exister dans Silver
           - cles_orphelines:
               source_model: ref('slv_clients')
+      - name: nom_client
+        description: "Nom normalisé du client, dénormalisé depuis `slv_clients`."
+      - name: pays
+        description: "Pays normalisé du client, dénormalisé depuis `slv_clients`."
       - name: date_reference
+        description: "{{ doc('gld_col_date_reference') }}"
         tests:
           - not_null
           - couverture_agregat:
               source_model: ref('slv_commandes')
               date_column_source: updated_at
+      - name: nb_commandes_mois
+        description: "Nombre de commandes passées par le client sur le mois de référence."
+      - name: ca_ht_mois
+        description: "CA HT total du client sur le mois de référence, en euros."
+      - name: panier_moyen_mois
+        description: "Montant moyen HT par commande du client sur le mois."
+      - name: premiere_commande_mois
+        description: "Date de la première commande du client dans le mois de référence."
+      - name: derniere_commande_mois
+        description: "Date de la dernière commande du client dans le mois de référence."
+      - name: nb_annulations_mois
+        description: "Nombre de commandes annulées par le client sur le mois."
+      - name: _loaded_at
+        description: "Timestamp du dernier chargement dbt ayant produit cette ligne."
+      - name: annee
+        description: "{{ doc('brz_col_partition_annee') }}"
+      - name: mois
+        description: "{{ doc('brz_col_partition_mois') }}"

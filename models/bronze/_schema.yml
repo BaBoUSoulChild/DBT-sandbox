@@ -3,32 +3,75 @@ version: 2
 models:
 
   - name: brz_commandes
-    description: "Ingestion brute des commandes partitionnée par date de modification"
+    description: "{{ doc('brz_commandes') }}"
+    meta:
+      owner: equipe-data-engineering
+      domaine: commandes
+      couche: bronze
+      sla: "chargement quotidien J"
+      sensibilite: confidentiel
     columns:
       - name: id_commande
-        description: "PK commande"
+        description: "{{ doc('brz_col_id_commande') }}"
         tests:
           - not_null
+      - name: id_client
+        description: "{{ doc('brz_col_id_client') }}"
+      - name: montant_ht
+        description: "Montant hors taxe brut issu du système source, type non garanti."
+      - name: statut
+        description: "{{ doc('brz_col_statut') }}"
       - name: updated_at
+        description: "{{ doc('brz_col_updated_at') }}"
         tests:
           - not_null
+      - name: _loaded_at
+        description: "{{ doc('brz_col_loaded_at') }}"
+      - name: _dbt_invocation_id
+        description: "Identifiant du run dbt ayant chargé la ligne. Permet la traçabilité des chargements."
       - name: annee
+        description: "{{ doc('brz_col_partition_annee') }}"
         tests:
           - not_null
       - name: mois
+        description: "{{ doc('brz_col_partition_mois') }}"
         tests:
           - not_null
       - name: jour
+        description: "{{ doc('brz_col_partition_jour') }}"
         tests:
           - not_null
 
   - name: brz_clients
-    description: "Ingestion brute du référentiel clients partitionnée par date de modification"
+    description: "{{ doc('brz_clients') }}"
+    meta:
+      owner: equipe-data-engineering
+      domaine: clients
+      couche: bronze
+      sla: "chargement quotidien J"
+      sensibilite: confidentiel
     columns:
       - name: id_client
-        description: "PK client"
+        description: "Identifiant technique unique du client tel que fourni par le système source."
         tests:
           - not_null
+      - name: nom
+        description: "Nom du client brut, casse non normalisée."
+      - name: email
+        description: "Adresse email brute, casse non normalisée."
+      - name: pays
+        description: "Code ou libellé pays brut issu du système source."
       - name: updated_at
+        description: "{{ doc('brz_col_updated_at') }}"
         tests:
           - not_null
+      - name: _loaded_at
+        description: "{{ doc('brz_col_loaded_at') }}"
+      - name: _dbt_invocation_id
+        description: "Identifiant du run dbt ayant chargé la ligne."
+      - name: annee
+        description: "{{ doc('brz_col_partition_annee') }}"
+      - name: mois
+        description: "{{ doc('brz_col_partition_mois') }}"
+      - name: jour
+        description: "{{ doc('brz_col_partition_jour') }}"

@@ -1,0 +1,54 @@
+version: 2
+
+exposures:
+
+  - name: dashboard_ventes_quotidiennes
+    label: "Dashboard Ventes Quotidiennes"
+    type: dashboard
+    maturity: high
+    description: >
+      Tableau de bord commercial présentant le CA journalier, le panier moyen,
+      le volume de commandes et le taux d'annulation. Alimenté chaque matin J+1
+      après le run dbt de nuit. Source principale de suivi opérationnel des ventes.
+    meta:
+      outil: Metabase
+      frequence_refresh: quotidien
+    owner:
+      name: Equipe BI
+      email: bi@monentreprise.com
+    depends_on:
+      - ref('gld_commandes_par_jour')
+
+  - name: reporting_kpi_clients
+    label: "Reporting KPI Clients"
+    type: dashboard
+    maturity: medium
+    description: >
+      Rapport mensuel de suivi des clients : CA par client, panier moyen,
+      fréquence d'achat et taux d'annulation. Utilisé par les équipes CRM
+      pour la segmentation et les campagnes de fidélisation.
+    meta:
+      outil: Metabase
+      frequence_refresh: mensuel
+    owner:
+      name: Equipe CRM
+      email: crm@monentreprise.com
+    depends_on:
+      - ref('gld_kpi_clients')
+
+  - name: analyse_ad_hoc_ventes
+    label: "Notebook Analyse Ad Hoc Ventes"
+    type: notebook
+    maturity: low
+    description: >
+      Notebooks Jupyter utilisés par l'équipe Data Science pour des analyses
+      exploratoires ponctuelles sur les tendances de vente et la détection
+      d'anomalies. Consomment directement les tables Gold via Hive.
+    meta:
+      outil: JupyterHub
+    owner:
+      name: Equipe Data Science
+      email: datascience@monentreprise.com
+    depends_on:
+      - ref('gld_commandes_par_jour')
+      - ref('gld_kpi_clients')
