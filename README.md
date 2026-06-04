@@ -399,3 +399,77 @@ models:
           annee: 2024
           mois: 3
 ```
+
+---
+
+## Documentation générée
+
+### Fichiers produits par `dbt docs generate`
+
+La commande interroge à la fois le projet dbt et le catalogue Hive pour produire
+trois fichiers dans `target/` (gitignored) :
+
+| Fichier | Contenu |
+|---|---|
+| `target/manifest.json` | Graphe complet du projet : modèles, tests, macros, sources, exposures, dépendances (`ref`/`source`), métadonnées `meta` et `description` |
+| `target/catalog.json` | Catalogue Hive : types réels des colonnes, nombre de lignes, taille des partitions — produit en interrogeant le metastore au moment du `generate` |
+| `target/index.html` | Application web statique qui charge les deux fichiers JSON ci-dessus |
+
+```bash
+dbt docs generate   # produit les 3 fichiers dans target/
+dbt docs serve      # serveur local → http://localhost:8080
+```
+
+> `dbt docs generate` nécessite une connexion Hive active pour peupler `catalog.json`.
+> Sans connexion, seul `manifest.json` est produit et le site s'affiche sans les types de colonnes.
+
+### Ce qu'on voit dans le site
+
+**Fiche modèle** — pour chaque modèle (`brz_commandes`, `slv_clients`, etc.) :
+- Description issue du `doc()` block correspondant (`bronze.md`, `silver.md`, `gold.md`)
+- Tableau de toutes les colonnes avec type Hive réel + description
+- Bloc `meta` (owner, domaine, sla, sensibilite)
+- SQL compilé (le Jinja est résolu, on voit le SQL final envoyé à Hive)
+- Tests rattachés
+
+**Graphe de lineage** — onglet dédié, navigable :
+
+```mermaid
+flowchart LR
+    SRC1([source\nraw.commandes])
+    SRC2([source\nraw.clients])
+    SEED([seed\nref_statuts])
+
+    SRC1 --> BRZ1[brz_commandes]
+    SRC2 --> BRZ2[brz_clients]
+    BRZ1 --> SLV1[slv_commandes]
+    BRZ2 --> SLV2[slv_clients]
+    SEED --> SLV1
+    SLV1 --> GLD1[gld_commandes_par_jour]
+    SLV1 --> GLD2[gld_kpi_clients]
+    SLV2 --> GLD2
+
+    GLD1 --> EXP1([exposure\ndashboard_ventes])
+    GLD1 --> EXP3([exposure\nanalyse_ad_hoc])
+    GLD2 --> EXP2([exposure\nreporting_kpi_clients])
+    GLD2 --> EXP3
+```
+
+### Déployer le site en production
+
+Les trois fichiers `target/` sont suffisants pour héberger le site — aucun serveur
+dynamique requis.
+
+```bash
+# Exemple : publication sur un bucket S3
+dbt docs generate --target prod
+aws s3 sync target/ s3://mon-bucket-docs/dbt/ \
+  --exclude "*" \
+  --include "manifest.json" \
+  --include "catalog.json" \
+  --include "index.html"
+```
+
+Autres options courantes : Nginx, GitHub Pages, ou les intégrations natives
+d'outils comme **dbt Cloud**, **Atlan**, **DataHub** ou **Alation** qui consomment
+`manifest.json` directement pour alimenter leur propre catalogue de données.
