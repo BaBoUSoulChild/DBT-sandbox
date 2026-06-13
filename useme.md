@@ -142,19 +142,15 @@ Adopter dès le début une convention et s'y tenir :
 
 ### 3.1 Cloner ce sandbox et adapter la configuration
 
+Suivre la section [Installation](README.md#installation) du README (clone,
+environnement virtuel, dépendances Python, `profiles.example.yml`, `dbt deps`,
+`dbt debug`).
+
+Étape additionnelle spécifique à une migration :
+
 ```bash
-git clone <url-sandbox>
-cd DBT-sandbox
-
-# Adapter le nom du projet
+# Adapter le nom du projet au contexte client
 # dbt_project.yml → champ "name"
-
-# Configurer la connexion Hive
-cp profiles.example.yml ~/.dbt/profiles.yml
-# Éditer avec les paramètres du cluster cible
-
-# Vérifier la connexion
-dbt debug
 ```
 
 ### 3.2 Ajuster les variables globales
