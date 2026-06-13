@@ -234,6 +234,32 @@ SELECT * FROM (
 {{ deduplicate('source', ['id'], 'updated_at') }}
 ```
 
+### 4.1bis Minimum obligatoire pour un nouveau modèle
+
+Au-delà du `SELECT ... FROM`, voici ce qui est **réellement obligatoire** pour
+qu'un nouveau modèle tourne dans ce sandbox :
+
+| Élément | Obligatoire ? | Pourquoi |
+|---|---|---|
+| Le fichier `.sql` dans `models/bronze\|silver\|gold/` | Oui | Le nom de fichier = nom de la table. La config (`materialized`, `incremental_strategy`, `file_format`, `partition_by`, `schema`, `tags`) est héritée automatiquement depuis `dbt_project.yml` — rien à répéter. |
+| Déclaration dans `_sources.yml` | Oui, **si** le modèle utilise `{{ source(...) }}` | Sans elle : erreur de compilation "Source not found". Si le modèle ne lit que d'autres modèles via `{{ ref(...) }}`, rien à déclarer. |
+| Colonnes de partition (`{{ date_partition_cols(...) }}` / `{{ month_partition_cols(...) }}`) | Oui, si le dossier impose un `partition_by` | dbt ne vérifie rien à la compilation, mais l'`INSERT OVERWRITE` Hive échoue à l'exécution si les colonnes de partition déclarées dans la config n'existent pas dans le `SELECT`. |
+| Entrée dans `_schema.yml` | Non | Optionnel : sans elle, le modèle tourne mais `dbt test` n'a rien à tester et `dbt docs` n'affiche pas de description. |
+| `{{ config(...) }}` dans le modèle | Non | Seulement pour **déroger** à la config héritée (ex. un Gold avec un `partition_by` différent). |
+
+**Exemple — strict minimum pour un nouveau modèle Silver alimenté par un modèle existant :**
+
+```sql
+SELECT
+  *,
+  {{ date_partition_cols('updated_at') }}
+FROM {{ ref('brz_ma_nouvelle_table') }}
+WHERE {{ incremental_partition_predicate('updated_at') }}
+```
+
+Aucun `{{ config(...) }}`, aucun `_schema.yml`, aucun `_sources.yml` requis dans ce
+cas : tout est hérité de `dbt_project.yml` ou résolu automatiquement par `ref()`.
+
 ### 4.2 Contrôles à effectuer modèle par modèle
 
 Après chaque modèle migré, avant de passer au suivant :
