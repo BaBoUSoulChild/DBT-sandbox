@@ -256,6 +256,37 @@ WHERE {{ incremental_partition_predicate('updated_at') }}
 Aucun `{{ config(...) }}`, aucun `_schema.yml`, aucun `_sources.yml` requis dans ce
 cas : tout est hérité de `dbt_project.yml` ou résolu automatiquement par `ref()`.
 
+### 4.1quater Paramètres `{{ config(...) }}` recommandés au-delà du minimum
+
+Les paramètres listés en 4.1bis (`materialized`, `incremental_strategy`,
+`file_format`, `partition_by`, `schema`, `tags`) sont déjà hérités au niveau du
+dossier — les répéter dans chaque modèle est redondant (c'est le cas des 6
+modèles actuels de ce sandbox, qui recopient tous le même bloc). Au-delà de ce
+minimum, voici les paramètres `config()` à connaître pour des modèles Hive
+incrémentiels :
+
+| Paramètre | Pourquoi |
+|---|---|
+| `on_schema_change: 'fail'` | Hive `INSERT OVERWRITE` est positionnel (par ordre de colonnes, pas par nom). Un changement de schéma source non anticipé peut décaler silencieusement des colonnes entre elles. `fail` stoppe le run au lieu de corrompre la table. |
+| `tblproperties = hive_tblproperties()` | Macro fournie dans `hive_utils.sql` mais non câblée dans les modèles : elle taggue la table avec `dbt_node`/`dbt_invocation_id` — traçabilité visible via `DESCRIBE FORMATTED` en Beeline. |
+| `persist_docs: {relation: true, columns: true}` | Propage les descriptions de `_schema.yml` en `COMMENT` Hive, visibles hors de `dbt docs`. |
+| `full_refresh: false` | Protège un modèle coûteux (ex. Gold avec gros historique) d'un `--full-refresh` global accidentel. |
+| `materialized: table / view / ephemeral` | Pour un modèle hors médaillon : `view` pour un passthrough léger, `ephemeral` pour un CTE technique injecté sans matérialisation, `table` pour un recalcul complet non partitionné. |
+| `unique_key` | Généralement inutile avec `insert_overwrite` (la dédup se fait via `deduplicate()` au niveau partition) — pertinent surtout pour une stratégie `merge`, non supportée par Hive non-ACID. |
+
+`on_schema_change` et `persist_docs` sont assez universels pour être déclarés
+une seule fois au niveau projet plutôt que répétés par modèle :
+
+```yaml
+# dbt_project.yml
+models:
+  dbt_sandbox:
+    +on_schema_change: fail
+    +persist_docs:
+      relation: true
+      columns: true
+```
+
 ### 4.2 Contrôles à effectuer modèle par modèle
 
 Après chaque modèle migré, avant de passer au suivant :
